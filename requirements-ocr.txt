@@ -1,0 +1,15 @@
+# Optional OCR dependencies (heavier). Install when you want actual OCR text.
+# pip install -r requirements-ocr.txt
+# For PaddleOCR-VL, install extra deps:
+# pip install "paddleocr[doc-parser]"
+#
+# Windows note:
+# - Always install PaddlePaddle from the official wheel index (extra index below).
+# - If you change PaddlePaddle versions, re-test on a real PDF for stability.
+
+--extra-index-url https://www.paddlepaddle.org.cn/packages/stable/cpu/
+
+paddlepaddle>=3.3,<4.0
+paddleocr==3.4.0
+opencv-python>=4.8,<5.0
+numpy>=1.26,<3.0

@@ -1,0 +1,7 @@
+# Python 3.10+ (recommended: 3.10)
+python-dotenv>=1.0,<2.0
+pydantic>=2.6,<3.0
+pymupdf>=1.23,<2.0
+pillow>=10.0,<11.0
+typer>=0.12,<1.0
+rich>=13.7,<14.0
