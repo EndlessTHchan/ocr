@@ -30,12 +30,24 @@ def run(
     outdir: Path = typer.Option(Path("out"), help="Output directory"),
     dpi: int = typer.Option(300, help="Render DPI (72-600)", min=72, max=600),
     ocr_engine: str = typer.Option(
-        "none", help="OCR engine: none|paddle|vl (vl requires PaddleOCR-VL deps)"
+        "none", help="OCR engine: none|paddle|vl|aistudio"
     ),
     keep_header: bool = typer.Option(False, help="Keep header blocks"),
     keep_footer: bool = typer.Option(False, help="Keep footer blocks"),
     keep_caption: bool = typer.Option(False, help="Keep caption blocks"),
     include_page_markers: bool = typer.Option(True, help="Insert 【原书第 N 页】 markers"),
+    page_batch_size: int = typer.Option(
+        20,
+        help="Process pages in batches (default 20)",
+        min=1,
+        max=200,
+    ),
+    max_pages: int | None = typer.Option(
+        None,
+        help="Limit total pages to process (default: all)",
+        min=1,
+        max=2000,
+    ),
     columns: str = typer.Option(
         "auto",
         help="Reading order columns: auto|single|double",
@@ -96,6 +108,30 @@ def run(
         exists=False,
         dir_okay=False,
     ),
+    aistudio_api_url: str | None = typer.Option(
+        None,
+        help="AIStudio OCR API URL (default from AISTUDIO_API_URL)",
+    ),
+    aistudio_token: str | None = typer.Option(
+        None,
+        help="AIStudio OCR API token (default from AISTUDIO_TOKEN)",
+    ),
+    aistudio_use_doc_orientation_classify: bool = typer.Option(
+        False,
+        help="AIStudio: use document orientation classification",
+    ),
+    aistudio_use_doc_unwarping: bool = typer.Option(
+        False,
+        help="AIStudio: use document unwarping",
+    ),
+    aistudio_use_chart_recognition: bool = typer.Option(
+        False,
+        help="AIStudio: use chart recognition",
+    ),
+    aistudio_timeout_s: int = typer.Option(
+        300,
+        help="AIStudio: request timeout in seconds",
+    ),
     language: str = typer.Option("ch", help="OCR language (paddleocr lang code), e.g. ch"),
     proofread_engine: str = typer.Option(
         "none",
@@ -149,6 +185,8 @@ def run(
     cfg = RunConfig(
         dpi=dpi,
         include_page_markers=include_page_markers,
+        page_batch_size=page_batch_size,
+        max_pages=max_pages,
         columns=columns,  # type: ignore[arg-type]
 
         reading_direction=reading_direction,  # type: ignore[arg-type]
@@ -164,11 +202,17 @@ def run(
         vl_pipeline_version=vl_pipeline_version,  # type: ignore[arg-type]
         vl_model_dir=str(vl_model_dir) if vl_model_dir else None,
         vl_use_layout_detection=vl_use_layout_detection,
+        paddle_ocr_kwargs=extra_kwargs,
+        aistudio_api_url=aistudio_api_url,
+        aistudio_token=aistudio_token,
+        aistudio_use_doc_orientation_classify=aistudio_use_doc_orientation_classify,
+        aistudio_use_doc_unwarping=aistudio_use_doc_unwarping,
+        aistudio_use_chart_recognition=aistudio_use_chart_recognition,
+        aistudio_timeout_s=aistudio_timeout_s,
         ocr_engine=ocr_engine,  # type: ignore[arg-type]
         proofread_engine=proofread_engine,  # type: ignore[arg-type]
         proofread_domain_hint=proofread_domain_hint,
         proofread_glossary_path=str(proofread_glossary) if proofread_glossary else None,
-            paddle_ocr_kwargs=extra_kwargs,
         proofread_max_chars_per_batch=proofread_max_chars,
         proofread_max_blocks_per_batch=proofread_max_blocks,
         proofread_max_pages_per_batch=proofread_pages,

@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import re
+
 from ..models import Block, BlockType, FilterConfig
 
 
+_FIGURE_CAPTION_RE = re.compile(r"^\s*(图|Fig\.?|Figure)\s*[0-9A-Za-z]*", re.IGNORECASE)
+_REFERENCES_RE = re.compile(r"^\s*(参考文献|References|Bibliography)\b", re.IGNORECASE)
+
+
 def keep_block(block: Block, cfg: FilterConfig) -> bool:
+    text = (block.raw_text or "").strip()
+    if text and (_FIGURE_CAPTION_RE.match(text) or _REFERENCES_RE.match(text)):
+        return False
+
     # Hard requirements: captions / figures / page numbers are never kept.
     # (Blind-user friendly: remove non-body noise.)
     if block.type in (BlockType.caption, BlockType.figure):

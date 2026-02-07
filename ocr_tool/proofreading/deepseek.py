@@ -13,7 +13,7 @@ from typing import Any, Optional
 class DeepSeekConfig:
     api_key: str
     base_url: str = "https://api.deepseek.com"
-    model: str = "deepseek-reasoner"
+    model: str = "deepseek-chat"
     timeout_s: int = 120
 
 
@@ -58,8 +58,8 @@ def load_deepseek_config_from_env() -> DeepSeekConfig:
         raise DeepSeekError("Missing DEEPSEEK_API_KEY in environment/.env")
 
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
-    # Default to the reasoning model; can be overridden via DEEPSEEK_MODEL.
-    model = os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner")
+    # Default to deepseek-chat; can be overridden via DEEPSEEK_MODEL.
+    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
     timeout_s = int(os.getenv("DEEPSEEK_TIMEOUT_S", "120"))
     return DeepSeekConfig(api_key=api_key, base_url=base_url, model=model, timeout_s=timeout_s)
 
@@ -218,6 +218,42 @@ class ProofreadPagesResult:
     meta: dict[str, Any]
 
 
+def _build_system_prompt(*, multi_page: bool) -> str:
+    scope_line = (
+        "说明：本请求包含多页（pages）。阅读顺序/分栏/竖排等排版处理已由上游程序完成，你不得重新排序、不得重组段落。"
+        if multi_page
+        else "说明：阅读顺序/分栏/竖排等排版处理已由上游程序完成，你不得重新排序、不得重组段落。"
+    )
+    return (
+        "你是 OCR 校对专家，为盲人用户优化扫描文档识别结果。\n"
+        "核心任务：\n"
+        "1) 最小化纠错：形近字/标点/术语/数字单位（禁止改写）\n"
+        "2) 标注内容角色（role_suggestion），给出过滤建议（keep_recommendation，仅建议不删除）\n"
+        "3) 提取章节结构（structure_hints，不虚构）\n\n"
+        f"{scope_line}\n\n"
+        "修改规则：\n"
+        "- 可以改：形近字、专业术语（结合 domain_hint 与 glossary）、标点错误、OCR 噪点（多余空格等）\n"
+        "- 不能改：不得改写表达/改变风格；不得扩写/总结；不得合并/拆分段落；不得改变 block 顺序\n"
+        "- 繁体书保持繁体，古籍引文保持原样\n\n"
+        "角色标注（role_suggestion）：body|title|table|header|footer|caption|figure|page_number|footnote|other\n"
+        "保留建议（keep_recommendation）：keep|drop|user_choice\n"
+        "- keep：正文/标题/表格/脚注\n"
+        "- drop：caption/figure/page_number（必须 drop）\n"
+        "- user_choice：header/footer（通常 user_choice）\n\n"
+        "特殊处理提示（仅用于校对/标注，不得重排）：\n"
+        "- 表格：尽量保留文本，可用制表符分隔（如无法确定则保持原样）\n"
+        "- 公式：保留符号，无法识别可在 keep_reason 或 meta.notes 里提示 [公式无法识别]\n"
+        "- 对于图片/插图/照片的说明或图注：请将 corrected_text 置空，并标注 role_suggestion 为 figure 或 caption，keep_recommendation=drop。\n"
+        "- 若文本以“图”“图1.1”“Figure”“Fig.”等开头，或明显是在解释图示内容，按图注处理并删除。\n"
+        "- 参考文献/References/Bibliography 段落应删除：corrected_text 置空，role_suggestion=other，keep_recommendation=drop。\n\n"
+        "- 版权页/出版信息/印刷信息/免责声明/合同登记号/CIP/ISBN/责任编辑/出版人/出版发行/社址/邮编/电话/网址/定价/版次/印次/开本/印张/字数等信息应删除：corrected_text 置空，role_suggestion=other，keep_recommendation=drop。\n\n"
+        "输出要求：\n"
+        "- 只输出严格 JSON（对象），不要 Markdown，不要代码块，不要任何解释文字\n"
+        "- structure_hints 的 text 必须来自你输出的 corrected_text，不得虚构\n"
+        "- 可在 meta.notes 中附带 layout_analysis 与质量问题提醒（不影响顺序）\n"
+    )
+
+
 def build_proofread_prompt(
     *,
     page_id: int,
@@ -228,30 +264,7 @@ def build_proofread_prompt(
     """Return (system, user) prompt that forces strict JSON output."""
 
     glossary = glossary or []
-    system = (
-        "你是 OCR 校对专家，为盲人用户优化扫描文档识别结果。\n"
-        "核心任务：\n"
-        "1) 最小化纠错：形近字/标点/术语/数字单位（禁止改写）\n"
-        "2) 标注内容角色（role_suggestion），给出过滤建议（keep_recommendation，仅建议不删除）\n"
-        "3) 提取章节结构（structure_hints，不虚构）\n\n"
-        "说明：阅读顺序/分栏/竖排等排版处理已由上游程序完成，你不得重新排序、不得重组段落。\n\n"
-        "修改规则：\n"
-        "- 可以改：形近字（如 己/已、目/日）、专业术语（结合 domain_hint 与 glossary）、标点错误（引号不配对、中英混用、省略号格式）、OCR 噪点（多余空格、中文句号误用等）\n"
-        "- 不能改：不得改写表达/改变风格；不得扩写/总结；不得合并/拆分段落；不得改变 block 顺序\n"
-        "- 繁体书保持繁体，古籍引文保持原样\n\n"
-        "角色标注（role_suggestion）：body|title|table|header|footer|caption|figure|page_number|footnote|other\n"
-        "保留建议（keep_recommendation）：keep|drop|user_choice\n"
-        "- keep：正文/标题/表格/脚注\n"
-        "- drop：caption/figure/page_number（盲人朗读严重干扰，必须标注为 drop）\n"
-        "- user_choice：header/footer（可能含章节信息，通常交给用户选择）\n\n"
-        "特殊处理提示（仅用于校对/标注，不得重排）：\n"
-        "- 表格：尽量保留文本，可用制表符分隔（如无法确定则保持原样）\n"
-        "- 公式：保留符号，无法识别可在 keep_reason 或 meta.notes 里提示 [公式无法识别]\n\n"
-        "输出要求：\n"
-        "- 只输出严格 JSON（对象），不要 Markdown，不要代码块，不要任何解释文字\n"
-        "- structure_hints 的 text 必须来自你输出的 corrected_text，不得虚构\n"
-        "- 可在 meta.notes 中附带 layout_analysis（single_column/double_column/vertical_rtl/mixed）与质量问题提醒，但不得据此改动顺序\n"
-    )
+    system = _build_system_prompt(multi_page=False)
 
     user_obj = {
         "task": "proofread",
@@ -304,27 +317,7 @@ def build_proofread_prompt_pages(
     """Return (system, user) prompt that forces strict JSON output for multiple pages."""
 
     glossary = glossary or []
-    system = (
-        "你是 OCR 校对专家，为盲人用户优化扫描文档识别结果。\n"
-        "核心任务：\n"
-        "1) 最小化纠错：形近字/标点/术语/数字单位（禁止改写）\n"
-        "2) 标注内容角色（role_suggestion），给出过滤建议（keep_recommendation，仅建议不删除）\n"
-        "3) 提取章节结构（structure_hints，不虚构）\n\n"
-        "说明：本请求包含多页（pages）。阅读顺序/分栏/竖排等排版处理已由上游程序完成，你不得重新排序、不得重组段落。\n\n"
-        "修改规则：\n"
-        "- 可以改：形近字、专业术语（结合 domain_hint 与 glossary）、标点错误、OCR 噪点（多余空格等）\n"
-        "- 不能改：不得改写表达/改变风格；不得扩写/总结；不得合并/拆分段落；不得改变 block 顺序\n"
-        "- 繁体书保持繁体\n\n"
-        "角色标注（role_suggestion）：body|title|table|header|footer|caption|figure|page_number|footnote|other\n"
-        "保留建议（keep_recommendation）：keep|drop|user_choice\n"
-        "- keep：正文/标题/表格/脚注\n"
-        "- drop：caption/figure/page_number（必须 drop）\n"
-        "- user_choice：header/footer（通常 user_choice）\n\n"
-        "输出要求：\n"
-        "- 只输出严格 JSON（对象），不要 Markdown，不要代码块，不要任何解释文字\n"
-        "- structure_hints 的 text 必须来自 corrected_text，不得虚构\n"
-        "- 可在 meta.notes 中附带 layout_analysis 与质量问题提醒（不影响顺序）\n"
-    )
+    system = _build_system_prompt(multi_page=True)
 
     user_obj = {
         "task": "proofread_pages",

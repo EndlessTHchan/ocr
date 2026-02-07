@@ -189,3 +189,162 @@
 
 修改出处：
 - extract_block_content.py
+
+---
+
+时间：2026-02-07 01:05 +08:00
+
+修改说明：
+- 新增 AIStudio OCR API 引擎，支持从 API 返回的 block_content 拼接朗读文本。
+- CLI 增加 AIStudio 参数，并将配置贯通到 pipeline。
+- 用法文档补充 AIStudio 使用与 .env 配置说明。
+
+修改出处：
+- ocr_tool/ocr/aistudio.py
+- ocr_tool/ocr/engine.py
+- ocr_tool/models.py
+- ocr_tool/cli.py
+- ocr_tool/pipeline.py
+- PROJECT_GUIDE.md
+
+---
+
+时间：2026-02-07 01:20 +08:00
+
+修改说明：
+- 重写 JSON 解析脚本，统一解析页面元信息与 parsing_res_list。
+- 用法文档补充 JSON 字段说明与脚本输出。
+
+修改出处：
+- extract_block_content.py
+- PROJECT_GUIDE.md
+
+---
+
+时间：2026-02-07 01:28 +08:00
+
+修改说明：
+- DeepSeek 默认模型改为 `deepseek-chat`（可通过环境变量覆盖）。
+- 文档示例同步更新。
+
+修改出处：
+- ocr_tool/proofreading/deepseek.py
+- PROJECT_GUIDE.md
+
+---
+
+时间：2026-02-07 01:33 +08:00
+
+修改说明：
+- DeepSeek 每批处理页数默认改为 10（可通过 CLI 参数调整）。
+
+修改出处：
+- ocr_tool/cli.py
+- ocr_tool/models.py
+- PROJECT_GUIDE.md
+
+---
+
+时间：2026-02-07 01:46 +08:00
+
+修改说明：
+- AIStudio 模式下按 parsing_res_list 构建文本块，并将原始返回写入每页 JSON。
+- DeepSeek 校对改为使用解析后的 block_content（不再直接使用原始 JSON）。
+
+修改出处：
+- ocr_tool/ocr/aistudio.py
+- ocr_tool/ocr/engine.py
+- ocr_tool/pipeline.py
+- PROJECT_GUIDE.md
+
+---
+
+时间：2026-02-07 02:05 +08:00
+
+修改说明：
+- DeepSeek 每批处理页数默认还原为 15。
+
+修改出处：
+- ocr_tool/cli.py
+- ocr_tool/models.py
+- PROJECT_GUIDE.md
+
+---
+
+时间：2026-02-07 02:18 +08:00
+
+修改说明：
+- 新增按批处理页面能力（默认每批 20 页）。
+
+修改出处：
+- ocr_tool/models.py
+- ocr_tool/cli.py
+- ocr_tool/pipeline.py
+- PROJECT_GUIDE.md
+
+---
+
+时间：2026-02-07 02:32 +08:00
+
+修改说明：
+- DeepSeek prompt 重构，统一规则并强化图注/参考文献删除。
+- 增加本地文本规则：图注与参考文献内容直接过滤。
+
+修改出处：
+- ocr_tool/proofreading/deepseek.py
+- ocr_tool/filtering/apply.py
+
+---
+
+时间：2026-02-07 02:32 +08:00
+
+修改说明：
+- 新增限制处理总页数的参数（`--max-pages`）。
+
+修改出处：
+- ocr_tool/models.py
+- ocr_tool/cli.py
+- ocr_tool/pipeline.py
+- PROJECT_GUIDE.md
+
+---
+
+时间：2026-02-07 02:45 +08:00
+
+修改说明：
+- DeepSeek prompt 增加删除版权页/出版印刷信息/免责声明/ISBN/CIP 等规则。
+
+修改出处：
+- ocr_tool/proofreading/deepseek.py
+
+---
+
+时间：2026-02-07 02:58 +08:00
+
+修改说明：
+- 新增 DeepSeek 后处理脚本：删除参考文献/出版信息并优化段落结构。
+
+修改出处：
+- post_process_output.py
+
+---
+
+时间：2026-02-07 03:08 +08:00
+
+修改说明：
+- 后处理脚本增加按 token 拆分与更小默认批次，避免单次输出过长。
+- tokenizer 脚本支持统计 token 并给出建议批大小。
+
+修改出处：
+- post_process_output.py
+- token/deepseek_tokenizer.py
+
+---
+
+时间：2026-02-07 03:16 +08:00
+
+修改说明：
+- 补充后处理与 tokenizer 使用说明。
+
+修改出处：
+- PROJECT_GUIDE.md

@@ -5,11 +5,14 @@ from pathlib import Path
 
 from PIL import Image
 
+from .aistudio import AIStudioConfig, call_aistudio_api, extract_spoken_blocks, load_aistudio_config_from_env
+
 
 @dataclass(frozen=True)
 class OcrText:
     text: str
     confidence: float | None
+    raw_result: dict | None = None
 
 
 class OcrEngine:
@@ -29,6 +32,44 @@ class NoneOcrEngine(OcrEngine):
     def recognize_page(self, image_path: str) -> OcrText:
         _ = image_path
         return OcrText(text="", confidence=None)
+
+
+class AIStudioOcrEngine(OcrEngine):
+    def __init__(
+        self,
+        *,
+        api_url: str | None = None,
+        token: str | None = None,
+        use_doc_orientation_classify: bool = False,
+        use_doc_unwarping: bool = False,
+        use_chart_recognition: bool = False,
+        timeout_s: int = 300,
+    ) -> None:
+        if token is None:
+            env_cfg = load_aistudio_config_from_env()
+            token = env_cfg.token
+            api_url = api_url or env_cfg.api_url
+
+        if not token:
+            raise RuntimeError("Missing AISTUDIO_TOKEN in environment/.env")
+
+        self._cfg = AIStudioConfig(
+            api_url=api_url or "https://bbe186c9acy0c7aa.aistudio-app.com/layout-parsing",
+            token=token,
+            use_doc_orientation_classify=use_doc_orientation_classify,
+            use_doc_unwarping=use_doc_unwarping,
+            use_chart_recognition=use_chart_recognition,
+            timeout_s=timeout_s,
+        )
+
+    def recognize(self, image: Image.Image) -> OcrText:
+        _ = image
+        return OcrText(text="", confidence=None)
+
+    def recognize_page(self, image_path: str) -> OcrText:
+        result = call_aistudio_api(Path(image_path), self._cfg)
+        spoken = extract_spoken_blocks(result)
+        return OcrText(text="\n\n".join(spoken), confidence=None, raw_result=result)
 
 
 def _strip_markdown(text: str) -> str:
@@ -284,6 +325,12 @@ def build_engine(
     vl_model_dir: str | None = None,
     vl_use_layout_detection: bool = True,
     paddle_ocr_kwargs: dict[str, object] | None = None,
+    aistudio_api_url: str | None = None,
+    aistudio_token: str | None = None,
+    aistudio_use_doc_orientation_classify: bool = False,
+    aistudio_use_doc_unwarping: bool = False,
+    aistudio_use_chart_recognition: bool = False,
+    aistudio_timeout_s: int = 300,
 ) -> OcrEngine:
     if name == "none":
         return NoneOcrEngine()
@@ -307,6 +354,15 @@ def build_engine(
             use_doc_orientation_classify=use_doc_orientation_classify,
             use_doc_unwarping=use_doc_unwarping,
             use_layout_detection=vl_use_layout_detection,
+        )
+    if name == "aistudio":
+        return AIStudioOcrEngine(
+            api_url=aistudio_api_url,
+            token=aistudio_token,
+            use_doc_orientation_classify=aistudio_use_doc_orientation_classify,
+            use_doc_unwarping=aistudio_use_doc_unwarping,
+            use_chart_recognition=aistudio_use_chart_recognition,
+            timeout_s=aistudio_timeout_s,
         )
     raise ValueError(f"Unknown OCR engine: {name}")
 

@@ -64,12 +64,14 @@ class RunConfig(BaseModel):
     layout_strategy: Literal["simple"] = "simple"
     columns: Literal["auto", "single", "double"] = "auto"
     reading_direction: Literal["auto", "horizontal", "vertical_rtl"] = "auto"
+    page_batch_size: int = 20
+    max_pages: Optional[int] = None
 
     # Filtering
     filter: FilterConfig = Field(default_factory=FilterConfig)
 
     # OCR engine
-    ocr_engine: Literal["none", "paddle", "vl"] = "none"
+    ocr_engine: Literal["none", "paddle", "vl", "aistudio"] = "none"
     language: str = "ch"
     watermark_filter: bool = False
     use_doc_orientation_classify: bool = True
@@ -83,6 +85,12 @@ class RunConfig(BaseModel):
     vl_model_dir: Optional[str] = None
     vl_use_layout_detection: bool = True
     paddle_ocr_kwargs: dict[str, object] = Field(default_factory=dict)
+    aistudio_api_url: Optional[str] = None
+    aistudio_token: Optional[str] = None
+    aistudio_use_doc_orientation_classify: bool = False
+    aistudio_use_doc_unwarping: bool = False
+    aistudio_use_chart_recognition: bool = False
+    aistudio_timeout_s: int = 300
 
     # Proofreading (LLM)
     proofread_engine: Literal["none", "deepseek"] = "none"

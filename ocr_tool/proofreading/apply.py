@@ -3,7 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..models import Block
-from .deepseek import DeepSeekConfig, deepseek_proofread_blocks, deepseek_proofread_pages, load_deepseek_config_from_env
+from .deepseek import (
+    DeepSeekConfig,
+    DeepSeekError,
+    deepseek_proofread_blocks,
+    deepseek_proofread_pages,
+    load_deepseek_config_from_env,
+)
 
 
 def _load_glossary(glossary_path: Path | None) -> list[str]:
@@ -168,55 +174,110 @@ def proofread_pages_deepseek(
             chars += len(b.raw_text or "")
 
         pages_payload = [{"page_id": pid, "blocks": blks} for pid, blks in pages_obj.items()]
-        res = deepseek_proofread_pages(
-            cfg=cfg,
-            pages=pages_payload,
-            domain_hint=domain_hint,
-            glossary=glossary,
-        )
-
-        # Apply corrected text.
-        for out_b in res.blocks:
-            b = blocks_by_key.get((out_b.page_id, out_b.block_id))
-            if not b:
-                continue
-            if b.raw_text_original is None:
-                b.raw_text_original = b.raw_text
-            b.raw_text = out_b.corrected_text
-            b.role_suggestion = out_b.role_suggestion
-            b.keep_recommendation = out_b.keep_recommendation
-            b.keep_reason = out_b.keep_reason
-
-        # Debug/meta + structure hints split by page.
-        pages_in_req = sorted(pages_obj.keys())
-        meta_entry = {
-            **dict(res.meta),
-            "pages": pages_in_req,
-            "blocks": sum(len(v) for v in pages_obj.values()),
-            "chars": chars,
-        }
-
-        for pid in pages_in_req:
-            d = debug_by_page.get(pid)
-            if d is None:
-                continue
-            d["batches"] = int(d.get("batches", 0)) + 1
-            d.setdefault("meta", []).append(meta_entry)
-
-        for h in res.structure_hints:
-            d = debug_by_page.get(h.page_id)
-            if d is None:
-                continue
-            d["structure_hints"].append(
-                {
-                    "block_id": h.block_id,
-                    "kind": h.kind,
-                    "level": h.level,
-                    "text": h.text,
-                    "confidence": h.confidence,
-                    "reason": h.reason,
-                }
+        try:
+            res = deepseek_proofread_pages(
+                cfg=cfg,
+                pages=pages_payload,
+                domain_hint=domain_hint,
+                glossary=glossary,
             )
+
+            for out_b in res.blocks:
+                b = blocks_by_key.get((out_b.page_id, out_b.block_id))
+                if not b:
+                    continue
+                if b.raw_text_original is None:
+                    b.raw_text_original = b.raw_text
+                b.raw_text = out_b.corrected_text
+                b.role_suggestion = out_b.role_suggestion
+                b.keep_recommendation = out_b.keep_recommendation
+                b.keep_reason = out_b.keep_reason
+
+            pages_in_req = sorted(pages_obj.keys())
+            meta_entry = {
+                **dict(res.meta),
+                "pages": pages_in_req,
+                "blocks": sum(len(v) for v in pages_obj.values()),
+                "chars": chars,
+            }
+
+            for pid in pages_in_req:
+                d = debug_by_page.get(pid)
+                if d is None:
+                    continue
+                d["batches"] = int(d.get("batches", 0)) + 1
+                d.setdefault("meta", []).append(meta_entry)
+
+            for h in res.structure_hints:
+                d = debug_by_page.get(h.page_id)
+                if d is None:
+                    continue
+                d["structure_hints"].append(
+                    {
+                        "block_id": h.block_id,
+                        "kind": h.kind,
+                        "level": h.level,
+                        "text": h.text,
+                        "confidence": h.confidence,
+                        "reason": h.reason,
+                    }
+                )
+        except DeepSeekError as e:
+            error_msg = str(e)
+            grouped: dict[int, list[Block]] = {}
+            for pid, b in batch_items:
+                grouped.setdefault(pid, []).append(b)
+
+            for pid, blocks in grouped.items():
+                try:
+                    payload = [
+                        {
+                            "block_id": b.block_id,
+                            "text": (b.raw_text or ""),
+                            "bbox": list(b.bbox),
+                            "block_type": str(b.type.value),
+                        }
+                        for b in blocks
+                    ]
+                    res = deepseek_proofread_blocks(
+                        cfg=cfg,
+                        page_id=pid,
+                        blocks=payload,
+                        domain_hint=domain_hint,
+                        glossary=glossary,
+                    )
+
+                    by_id = {r.block_id: r for r in res.blocks}
+                    for b in blocks:
+                        r = by_id.get(b.block_id)
+                        if not r:
+                            continue
+                        if b.raw_text_original is None:
+                            b.raw_text_original = b.raw_text
+                        b.raw_text = r.corrected_text
+                        b.role_suggestion = r.role_suggestion
+                        b.keep_recommendation = r.keep_recommendation
+                        b.keep_reason = r.keep_reason
+
+                    d = debug_by_page.get(pid)
+                    if d is not None:
+                        d["batches"] = int(d.get("batches", 0)) + 1
+                        d.setdefault("meta", []).append({"fallback": "per_page", "error": error_msg})
+                        for h in res.structure_hints:
+                            d["structure_hints"].append(
+                                {
+                                    "block_id": h.block_id,
+                                    "kind": h.kind,
+                                    "level": h.level,
+                                    "text": h.text,
+                                    "confidence": h.confidence,
+                                    "reason": h.reason,
+                                }
+                            )
+                except DeepSeekError as page_err:
+                    d = debug_by_page.get(pid)
+                    if d is not None:
+                        d.setdefault("meta", []).append({"fallback": "skip", "error": str(page_err)})
 
     # Pack candidates into DeepSeek requests.
     current: list[tuple[int, Block]] = []
