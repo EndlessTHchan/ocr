@@ -150,8 +150,8 @@ def run(
     proofread_max_chars: int = typer.Option(8000, help="Max chars per DeepSeek batch", min=200, max=8000),
     proofread_max_blocks: int = typer.Option(120, help="Max blocks per DeepSeek batch/request", min=1, max=200),
     proofread_pages: int = typer.Option(
-        15,
-        help="Max pages per DeepSeek batch/request (default 15)",
+        20,
+        help="Max pages per DeepSeek batch/request (default 20)",
         min=1,
         max=50,
     ),

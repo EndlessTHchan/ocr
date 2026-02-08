@@ -51,7 +51,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "proofread_glossary_path": None,
     "proofread_max_chars_per_batch": 8000,
     "proofread_max_blocks_per_batch": 120,
-    "proofread_max_pages_per_batch": 15,
+    "proofread_max_pages_per_batch": 20,
     "filter": {
         "keep_header": False,
         "keep_footer": False,
@@ -70,10 +70,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
 
 
 MODE_PRESETS: dict[str, dict[str, str]] = {
+    "aistudio+ds": {"ocr_engine": "aistudio", "proofread_engine": "deepseek"},
     "aistudio+deepseek": {"ocr_engine": "aistudio", "proofread_engine": "deepseek"},
     "aistudio+none": {"ocr_engine": "aistudio", "proofread_engine": "none"},
+    "paddle+ds": {"ocr_engine": "paddle", "proofread_engine": "deepseek"},
     "paddle+deepseek": {"ocr_engine": "paddle", "proofread_engine": "deepseek"},
     "paddle+none": {"ocr_engine": "paddle", "proofread_engine": "none"},
+    "vl+ds": {"ocr_engine": "vl", "proofread_engine": "deepseek"},
     "vl+deepseek": {"ocr_engine": "vl", "proofread_engine": "deepseek"},
     "vl+none": {"ocr_engine": "vl", "proofread_engine": "none"},
     "none": {"ocr_engine": "none", "proofread_engine": "none"},
@@ -116,6 +119,7 @@ def _require_env_var(name: str, prompt: str) -> str:
 
 
 def _resolve_api_keys(cfg: dict[str, Any], args: argparse.Namespace) -> None:
+    print("[1/4] 检查 API Key...")
     if cfg.get("proofread_engine") == "deepseek":
         if args.deepseek_key:
             os.environ["DEEPSEEK_API_KEY"] = args.deepseek_key
@@ -131,6 +135,8 @@ def _run_post_process(input_path: Path, cfg: dict[str, Any]) -> None:
     post_cfg = cfg.get("post_process_args", {}) if cfg.get("post_process") else None
     if not post_cfg:
         return
+
+    print("[4/4] DeepSeek 后处理开始...")
 
     output_path = Path(post_cfg.get("output", "out/output.cleaned.txt"))
     cmd = [
@@ -152,13 +158,18 @@ def _run_post_process(input_path: Path, cfg: dict[str, Any]) -> None:
         str(post_cfg.get("tokenizer_dir", "token")),
     ]
     subprocess.run(cmd, check=True)
+    print("[4/4] DeepSeek 后处理完成。")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Quick-run OCR pipeline.")
     parser.add_argument("pdf", help="Input PDF path")
     parser.add_argument("--config", default="run_config.json", help="Config JSON path")
-    parser.add_argument("--mode", default="", help="Mode preset, e.g. aistudio+deepseek")
+    parser.add_argument(
+        "--mode",
+        default="aistudio+deepseek",
+        help="Mode preset, e.g. aistudio+deepseek",
+    )
     parser.add_argument("--outdir", default=None, help="Output directory (default from config)")
     parser.add_argument("--aistudio-token", default=None, help="AIStudio token (optional)")
     parser.add_argument("--deepseek-key", default=None, help="DeepSeek API key (optional)")
@@ -227,10 +238,18 @@ def main() -> None:
 
     pdf_path = Path(args.pdf)
     out_dir = Path(cfg.get("outdir", "out"))
+    print("[2/4] OCR + 排版 + 顺序重建中...")
     out_txt = run_pdf(pdf_path=pdf_path, out_dir=out_dir, cfg=run_cfg)
+    print(f"[2/4] OCR 完成。输出：{out_txt}")
+
+    if cfg.get("proofread_engine") == "deepseek":
+        print("[3/4] DeepSeek 校对已在主流程中完成。")
+    else:
+        print("[3/4] 未启用校对。")
 
     if cfg.get("post_process"):
         _run_post_process(out_txt, cfg)
+    print("全部流程完成。")
 
 
 if __name__ == "__main__":

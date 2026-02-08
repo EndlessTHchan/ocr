@@ -2,19 +2,33 @@
 
 这份文档以“怎么用”为主，其他设计细节仅作必要补充。
 
+## 0. 环境准备
+
+建议 Python 3.10 及以上版本。
+
+1) 创建虚拟环境：
+```
+python -m venv .venv
+```
+
+2) 激活虚拟环境（Windows）：
+```
+\.\.venv\Scripts\Activate.ps1
+```
+
+3) 安装基础依赖：
+```
+\.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+4) 安装 OCR 依赖（需要真实识别时）：
+```
+\.\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-ocr.txt
+```
+
 ## 1. 快速开始（推荐）
 
-1) 安装基础依赖：
-```
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-2) 安装 OCR 依赖（需要真实识别时）：
-```
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-ocr.txt
-```
-
-3) 跑一遍 OCR（不启用大模型校对）：
+1) 跑一遍 OCR（不启用大模型校对）：
 ```
 .\.venv\Scripts\python.exe -m ocr_tool.cli run input.pdf --ocr-engine paddle --proofread-engine none
 ```
@@ -34,6 +48,16 @@ python quick_run.py input.pdf --config run_config.json
 说明：
 - DeepSeek 与 AIStudio 的 key 会在缺失时交互式提示输入。
 - `mode` 例子：`aistudio+deepseek`、`paddle+none`、`vl+deepseek`。
+
+### 模式说明（ocr_engine + proofread_engine）
+
+- `aistudio+deepseek`：AIStudio OCR + DeepSeek 校对
+- `aistudio+none`：仅 AIStudio OCR
+- `paddle+deepseek`：PaddleOCR + DeepSeek 校对
+- `paddle+none`：仅 PaddleOCR
+- `vl+deepseek`：PaddleOCR-VL + DeepSeek 校对
+- `vl+none`：仅 PaddleOCR-VL
+- `none`：只拆页/排版/输出
 
 ### 仅拆页 + 排版 + 输出（不做 OCR）
 ```
@@ -128,7 +152,7 @@ python quick_run.py input.pdf --config run_config.json
 - `--page-batch-size`：按批处理页数（默认 20）
 - `--max-pages`：限制处理总页数（默认全量）
 - `--language`：PaddleOCR 语言（默认 `ch`）
-- `--proofread-max-chars` / `--proofread-max-blocks` / `--proofread-pages`：控制 DeepSeek 批量大小（默认每批 15 页）
+- `--proofread-max-chars` / `--proofread-max-blocks` / `--proofread-pages`：控制 DeepSeek 批量大小（默认每批 20 页）
 
 ## 4. 输出产物
 
@@ -160,6 +184,10 @@ python token\deepseek_tokenizer.py --input out\output.txt --tokenizer-dir token 
 AISTUDIO_API_URL=https://your-aistudio-endpoint/layout-parsing
 AISTUDIO_TOKEN=你的Token
 ```
+
+补充说明：
+- 如果使用 `quick_run.py`，在缺少 key 时会提示输入。
+- 如果你想固定配置，建议将 key 写入 `.env`。
 
 说明：API 返回结构中会包含 `layoutParsingResults`，程序会从 `block_content` 中拼接朗读文本。
 在 `--ocr-engine aistudio` 模式下，每页 JSON 会额外写入 `aistudio_result` 原始返回，DeepSeek 校对基于 `parsing_res_list.block_content` 生成文本。
@@ -235,6 +263,7 @@ PaddleOCR-VL 额外说明：
 - 顺序不对：查看 `out_dir/pages/*.json` 中的 `ordered_block_ids`。
 - DeepSeek 报错：检查 [.env](.env) 是否配置，Key 是否有效。
 - 出现 `ConvertPirAttribute2RuntimeAttribute` 报错：通常是 PaddlePaddle 3.x 在 Windows/CPU 的运行时问题，优先更换 PaddlePaddle 3.x 的不同构建或版本并重新验证。
+- `quick_run.py` 运行失败：先确认 `.env` 是否配置；再检查 `mode` 是否正确。
 
 ## 9. 代码入口（仅供定位）
 

@@ -1,0 +1,10 @@
+1.目录下建立.env文件，内容如下：
+DEEPSEEK_API_KEY=你的DeepSeek API Key
+DEEPSEEK_API_BASE=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+AISTUDIO_TOKEN=你的AIStudio token
+
+2.pip安装依赖：
+pip install -r requirements.txt
+3.运行脚本：
+python quick_run.py 你的PDF文件路径

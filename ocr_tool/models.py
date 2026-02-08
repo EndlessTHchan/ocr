@@ -98,4 +98,4 @@ class RunConfig(BaseModel):
     proofread_glossary_path: Optional[str] = None
     proofread_max_chars_per_batch: int = 8000
     proofread_max_blocks_per_batch: int = 120
-    proofread_max_pages_per_batch: int = 15
+    proofread_max_pages_per_batch: int = 20

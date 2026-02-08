@@ -37,6 +37,7 @@ def run_pdf(pdf_path: Path, out_dir: Path, cfg: RunConfig) -> Path:
     page_images = split_pdf_to_images(pdf_path=pdf_path, out_dir=pages_dir, dpi=cfg.dpi)
     if cfg.max_pages is not None:
         page_images = page_images[: max(1, int(cfg.max_pages))]
+    total_pages = len(page_images)
     engine = build_engine(
         cfg.ocr_engine,
         cfg.language,
@@ -92,6 +93,8 @@ def run_pdf(pdf_path: Path, out_dir: Path, cfg: RunConfig) -> Path:
         from pathlib import Path
 
         glossary_path = Path(cfg.proofread_glossary_path) if cfg.proofread_glossary_path else None
+        page_ids = [p.page_id for p in pending_pages]
+        print(f"DeepSeek 校对批次：页 {page_ids[0]} - {page_ids[-1]}（共 {len(page_ids)} 页）")
         debug_by_page = proofread_pages_deepseek(
             pages=[(p.page_id, p.blocks) for p in pending_pages],
             domain_hint=cfg.proofread_domain_hint,
@@ -115,12 +118,20 @@ def run_pdf(pdf_path: Path, out_dir: Path, cfg: RunConfig) -> Path:
         pending_aistudio_result.clear()
 
     batch_size = max(1, int(cfg.page_batch_size))
-    for start in range(0, len(page_images), batch_size):
+    total_batches = (total_pages + batch_size - 1) // batch_size if total_pages else 0
+    print(f"总页数：{total_pages}，每批：{batch_size} 页，共 {total_batches} 批")
+    for batch_index, start in enumerate(range(0, len(page_images), batch_size), start=1):
         batch = page_images[start : start + batch_size]
+        batch_start = start + 1
+        batch_end = start + len(batch)
+        print(f"开始处理第 {batch_index}/{total_batches} 批（页 {batch_start}-{batch_end}）")
 
-        for page in batch:
+        for offset, page in enumerate(batch):
+            page_no = start + offset + 1
+            print(f"处理第 {page_no}/{total_pages} 页：{page.image_path}")
             if cfg.ocr_engine == "aistudio":
                 aistudio_result: dict | None = None
+                print("  - AIStudio OCR 识别中...")
                 ocr_out = engine.recognize_page(page.image_path)
                 if isinstance(ocr_out.raw_result, dict):
                     aistudio_result = ocr_out.raw_result
@@ -156,6 +167,10 @@ def run_pdf(pdf_path: Path, out_dir: Path, cfg: RunConfig) -> Path:
 
                         glossary_path = (
                             Path(cfg.proofread_glossary_path) if cfg.proofread_glossary_path else None
+                        )
+                        page_ids = [p.page_id for p in pending_pages]
+                        print(
+                            f"DeepSeek 校对批次：页 {page_ids[0]} - {page_ids[-1]}（共 {len(page_ids)} 页）"
                         )
                         debug_by_page = proofread_pages_deepseek(
                             pages=[(p.page_id, p.blocks) for p in pending_pages],
@@ -268,6 +283,7 @@ def run_pdf(pdf_path: Path, out_dir: Path, cfg: RunConfig) -> Path:
                 ordered_ids = order_blocks_auto(blocks, page_width=page.width)
 
             if hasattr(engine, "recognize_page") and cfg.ocr_engine in ("vl", "aistudio"):
+                print("  - OCR 识别中...")
                 ocr_out = engine.recognize_page(page.image_path)
                 primary_idx = None
                 for i, b in enumerate(blocks):
@@ -285,6 +301,7 @@ def run_pdf(pdf_path: Path, out_dir: Path, cfg: RunConfig) -> Path:
                         b.raw_text = ""
                         b.ocr_confidence = None
             else:
+                print("  - OCR 识别中...")
                 with Image.open(page.image_path) as im:
                     im = im.convert("RGB")
                     for b in blocks:
@@ -322,6 +339,10 @@ def run_pdf(pdf_path: Path, out_dir: Path, cfg: RunConfig) -> Path:
                     from pathlib import Path
 
                     glossary_path = Path(cfg.proofread_glossary_path) if cfg.proofread_glossary_path else None
+                    page_ids = [p.page_id for p in pending_pages]
+                    print(
+                        f"DeepSeek 校对批次：页 {page_ids[0]} - {page_ids[-1]}（共 {len(page_ids)} 页）"
+                    )
                     debug_by_page = proofread_pages_deepseek(
                         pages=[(p.page_id, p.blocks) for p in pending_pages],
                         domain_hint=cfg.proofread_domain_hint,
