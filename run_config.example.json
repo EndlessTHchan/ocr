@@ -1,0 +1,22 @@
+{
+  "mode": "aistudio+deepseek",
+  "outdir": "out",
+  "dpi": 300,
+  "include_page_markers": true,
+  "page_batch_size": 20,
+  "max_pages": null,
+  "columns": "auto",
+  "reading_direction": "auto",
+  "language": "ch",
+  "watermark_filter": false,
+  "aistudio_api_url": "https://your-aistudio-endpoint/layout-parsing",
+  "post_process": true,
+  "post_process_args": {
+    "output": "out/output.cleaned.txt",
+    "pages_per_batch": 8,
+    "max_chars": 4000,
+    "max_input_tokens": 3500,
+    "max_output_tokens": 3072,
+    "tokenizer_dir": "token"
+  }
+}

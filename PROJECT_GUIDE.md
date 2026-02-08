@@ -21,6 +21,20 @@
 
 ## 2. 常见用法
 
+### 快速一键运行（只需指定 API key + 模式）
+```
+python quick_run.py input.pdf --mode aistudio+deepseek
+```
+
+可选：使用配置文件（复制示例为 run_config.json 后修改）：
+```
+python quick_run.py input.pdf --config run_config.json
+```
+
+说明：
+- DeepSeek 与 AIStudio 的 key 会在缺失时交互式提示输入。
+- `mode` 例子：`aistudio+deepseek`、`paddle+none`、`vl+deepseek`。
+
 ### 仅拆页 + 排版 + 输出（不做 OCR）
 ```
 .\.venv\Scripts\python.exe -m ocr_tool.cli run input.pdf --ocr-engine none
